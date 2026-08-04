@@ -6,9 +6,9 @@ use App\Helpers\Format;
 
 /**
  * Ubah data /kpi-periods (satu record per KPI per periode, berisi nilai
- * realisasi akumulasi) menjadi satu baris per input/submission karyawan.
- * Dipakai oleh halaman Validasi Input KPI dan "Aktivitas Terbaru" di
- * Dashboard supaya logikanya tidak duplikat di dua tempat.
+ * realisasi akumulasi) menjadi satu baris per KPI per periode.
+ * 
+ * PERBAIKAN: USER_KEYS dan USER_ID_KEYS diperluas agar nama user muncul.
  */
 class KpiPeriodFlattener
 {
@@ -19,22 +19,24 @@ class KpiPeriodFlattener
         'input_by', 'input_by_nama', 'created_by_nama', 'nama_user', 'pengguna.nama',
         'user.username', 'karyawan.name', 'created_by.name', 'created_by.nama',
         'diinput_oleh', 'diinput_oleh_nama', 'submitted_by_nama',
+        // Tambahan untuk berbagai kemungkinan dari API
+        'submitted_by.name', 'submitted_by.nama',
+        'user_name', 'userName', 'username',
+        'nama_pengguna', 'pengguna',
+        'karyawan', 'created_by', 'submitted_by',
+        'name', 'nama',
     ];
 
-    /**
-     * Kemungkinan nama field foreign-key user (hanya berisi ID, bukan nama)
-     * pada record period/entry. Dipakai untuk menebak nama user lewat daftar
-     * /users kalau field nama langsung (USER_KEYS di atas) tidak ditemukan.
-     */
     public const USER_ID_KEYS = [
         'user_id', 'karyawan_id', 'created_by', 'created_by_id', 'input_by_id',
         'diinput_oleh_id', 'submitted_by', 'submitted_by_id', 'pengguna_id',
+        // Tambahan
+        'user.id', 'karyawan.id', 'created_by.id', 'submitted_by.id',
     ];
 
     /**
      * @param array $periods   Data mentah dari /kpi-periods
-     * @param array $usersById Peta [id => nama] dari /users, untuk resolve user
-     *                         lewat foreign key kalau nama tidak ada langsung di record.
+     * @param array $usersById Peta [id => nama] dari /users
      */
     public static function flatten(array $periods, array $usersById = []): array
     {
@@ -96,7 +98,7 @@ class KpiPeriodFlattener
     protected static function resolveUserNama(array $entry, array $usersById): ?string
     {
         $nama = Format::pick($entry, self::USER_KEYS);
-        if ($nama !== null) {
+        if ($nama !== null && $nama !== '') {
             return $nama;
         }
 

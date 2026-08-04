@@ -24,7 +24,7 @@ class UnitBisnisController extends Controller
         try {
             $kategori = $this->api->get('/kategori-unit-bisnis')['data'] ?? [];
         } catch (\Exception $e) {
-            // biarkan kategori kosong jika gagal
+            // biarkan kosong
         }
 
         $kategoriById = collect($kategori)->keyBy(fn ($k) => Format::pick($k, ['id', 'kategori_id']));
@@ -32,9 +32,6 @@ class UnitBisnisController extends Controller
         try {
             $rawUnit = $this->api->get('/unit-bisnis')['data'] ?? [];
 
-            // Normalisasi: samakan nama field kategori apapun bentuk respons API-nya
-            // (kategori_nama langsung, objek kategori.nama, atau hanya kategori_id yang
-            // perlu dicocokkan manual ke daftar kategori).
             $unitBisnis = array_map(function ($u) use ($kategoriById) {
                 $kategoriId = Format::pick($u, ['kategori_id', 'kategori.id']);
                 $kat        = $kategoriId !== null ? $kategoriById->get($kategoriId) : null;
@@ -92,40 +89,46 @@ class UnitBisnisController extends Controller
         try {
             $rawTemplates = $this->api->get("/kpi-templates/unit-bisnis/{$id}")['data'] ?? [];
 
-            // Normalisasi id template + nama KPI + satuan supaya konsisten dengan
-            // field yang dicocokkan ke data periode (target/realisasi) di bawah.
             $templates = array_map(function ($t) {
+                $kpiNama = Format::pick($t, ['kpi_jenis.nama', 'kpi_jenis_nama']);
+                if (!$kpiNama) {
+                    $kpiNama = Format::pick($t, ['nama']);
+                }
+                if (!$kpiNama) {
+                    $kpiNama = 'KPI #' . ($t['id'] ?? '?');
+                }
+
                 $t['id']     = Format::pick($t, ['id', 'kpi_template_id']);
-                $t['nama']   = Format::pick($t, ['nama', 'kpi_jenis.nama', 'kpi_jenis_nama']);
+                $t['nama']   = $kpiNama;
                 $t['satuan'] = Format::pick($t, ['satuan', 'kpi_jenis.satuan', 'kpi_jenis_satuan']);
+
+                $formTemplate = $t['form_template'] ?? [];
+                $t['form_template_id'] = $formTemplate['id'] ?? null;
+                $allFields = $formTemplate['fields'] ?? [];
+                $t['form_fields'] = array_values(array_filter($allFields, function($f) {
+                    return empty($f['kpi_template_id']);
+                }));
 
                 return $t;
             }, $rawTemplates);
         } catch (\Exception $e) {
-            //
+            $error = $e->getMessage();
         }
 
         try {
             $kpiJenis = $this->api->get('/kpi-jenis')['data'] ?? [];
         } catch (\Exception $e) {
-            //
+            // biarkan kosong
         }
 
         try {
             $periodeAktif = $this->api->get('/periode/aktif')['data'] ?? null;
         } catch (\Exception $e) {
-            //
+            // biarkan kosong
         }
 
         try {
-            $rawPeriods = $this->api->get("/kpi-periods/unit-bisnis/{$id}")['data'] ?? [];
-
-            // Normalisasi field + filter ke periode aktif saja. Sebelumnya kode ini
-            // TIDAK memfilter berdasarkan bulan/tahun sama sekali, jadi kalau unit
-            // punya lebih dari satu periode (histori bulan-bulan sebelumnya), yang
-            // dipakai bisa periode yang salah / tertimpa. Alias nama field juga
-            // diperbanyak karena API kadang memakai nama yang berbeda-beda untuk
-            // relasi ke template KPI-nya.
+            $allPeriods = $this->api->get('/kpi-periods')['data'] ?? [];
             $bulanAktifNow = $periodeAktif['bulan'] ?? now()->month;
             $tahunAktifNow = $periodeAktif['tahun'] ?? now()->year;
 
@@ -138,28 +141,30 @@ class UnitBisnisController extends Controller
                 $p['periode_tahun'] = Format::pick($p, ['periode_tahun', 'tahun']);
                 $p['target']        = Format::pick($p, ['target', 'nilai_target'], 0);
                 $p['realisasi']     = Format::pick($p, ['realisasi', 'nilai_realisasi', 'total_realisasi'], 0);
-
+                $p['threshold_hijau']  = Format::pick($p, ['threshold_hijau'], 90);
+                $p['threshold_kuning'] = Format::pick($p, ['threshold_kuning'], 70);
+                $p['id'] = Format::pick($p, ['id']);
                 return $p;
             };
 
-            $normalized = array_map($normalize, $rawPeriods);
+            $normalized = array_map($normalize, $allPeriods);
 
-            $periods = array_values(array_filter($normalized, function ($p) use ($bulanAktifNow, $tahunAktifNow) {
+            $filteredByUnit = array_filter($normalized, function ($p) use ($id) {
+                $uid = Format::pick($p, ['unit_bisnis_id', 'unit_bisnis.id']);
+                return $uid !== null && (int) $uid === (int) $id;
+            });
+
+            $periods = array_values(array_filter($filteredByUnit, function ($p) use ($bulanAktifNow, $tahunAktifNow) {
                 return $p['periode_bulan'] !== null && $p['periode_tahun'] !== null
                     && (int) $p['periode_bulan'] === (int) $bulanAktifNow
                     && (int) $p['periode_tahun'] === (int) $tahunAktifNow;
             }));
 
-            // Fallback: kalau setelah filter periode tidak ada satupun match (misal
-            // karena field periode_bulan/periode_tahun ternyata bernama lain di API),
-            // jangan sembunyikan semuanya — pakai data mentahnya apa adanya supaya
-            // target yang baru disimpan tetap kelihatan, dan biar mudah dicek lewat
-            // "Data API mentah" di kartu KPI.
-            if (empty($periods) && !empty($normalized)) {
-                $periods = $normalized;
+            if (empty($periods) && !empty($filteredByUnit)) {
+                $periods = array_values($filteredByUnit);
             }
         } catch (\Exception $e) {
-            //
+            // biarkan kosong
         }
 
         return view('unit-bisnis.show', compact(
@@ -193,18 +198,81 @@ class UnitBisnisController extends Controller
         }
     }
 
+    /**
+     * Tambah KPI — BACKEND OTOMATIS BUAT FORM TEMPLATE
+     * Kita hanya perlu menambahkan field tambahan (jika ada) ke form template yang sudah dibuat.
+     */
     public function tambahKpi(Request $request, $unitBisnisId)
     {
         $request->validate([
-            'kpi_jenis_id' => 'required',
+            'kpi_jenis_id' => 'required|integer',
+            'nama'         => 'nullable|string|max:255',
+            'form_fields'  => 'nullable|json',
         ]);
 
+        $formFields = json_decode($request->input('form_fields'), true);
+        if (!empty($formFields) && is_array($formFields)) {
+            foreach ($formFields as $f) {
+                $label = trim($f['label'] ?? '');
+                if (strcasecmp($label, 'KPI') === 0 || strcasecmp($label, 'Realisasi') === 0) {
+                    return back()->with('error', 'Label "KPI" atau "Realisasi" tidak boleh digunakan untuk field tambahan.');
+                }
+            }
+        }
+
         try {
-            $this->api->post('/kpi-templates', [
+            // 1. Buat KPI template — backend otomatis buat form template
+            $kpiResponse = $this->api->post('/kpi-templates', [
                 'unit_bisnis_id' => $unitBisnisId,
                 'kpi_jenis_id'   => $request->kpi_jenis_id,
+                'nama'           => $request->nama ?? null,
             ]);
-            return back()->with('success', 'KPI berhasil ditambahkan.');
+
+            $kpiTemplateId = $kpiResponse['data']['id'] ?? null;
+            if (!$kpiTemplateId) {
+                throw new \Exception('Gagal membuat KPI template, ID tidak ditemukan.');
+            }
+
+            // 2. Ambil form template ID yang otomatis dibuat
+            $formTemplateId = $kpiResponse['data']['form_template']['id'] ?? null;
+
+            // 3. Jika ada field tambahan dan form template ditemukan, update form template
+            if (!empty($formFields) && $formTemplateId) {
+                $kpiDetail = $this->api->get("/kpi-templates/{$kpiTemplateId}");
+                $existingForm = $kpiDetail['data']['form_template'] ?? null;
+                $existingFields = $existingForm['fields'] ?? [];
+
+                // Cari field KPI yang sudah ada (bawaan)
+                $kpiField = null;
+                foreach ($existingFields as $f) {
+                    if (!empty($f['kpi_template_id'])) {
+                        $kpiField = $f;
+                        break;
+                    }
+                }
+
+                $finalFields = [];
+                if ($kpiField) {
+                    $finalFields[] = $kpiField;
+                }
+
+                // Tambahkan field tambahan (urutan mulai 1)
+                foreach ($formFields as $idx => $f) {
+                    $finalFields[] = [
+                        'label'    => $f['label'],
+                        'tipe'     => $f['type'],
+                        'wajib'    => (bool) ($f['required'] ?? false),
+                        'urutan'   => $idx + 1,
+                    ];
+                }
+
+                // Update form template dengan field tambahan
+                $this->api->put("/form-templates/{$formTemplateId}", [
+                    'fields' => $finalFields,
+                ]);
+            }
+
+            return back()->with('success', 'KPI berhasil ditambahkan beserta form input.');
         } catch (\Exception $e) {
             return back()->with('error', $e->getMessage());
         }
@@ -215,6 +283,102 @@ class UnitBisnisController extends Controller
         try {
             $this->api->delete("/kpi-templates/{$kpiId}");
             return back()->with('success', 'KPI berhasil dihapus.');
+        } catch (\Exception $e) {
+            return back()->with('error', $e->getMessage());
+        }
+    }
+
+    /**
+     * Update form template (kelola form)
+     */
+    public function updateFormTemplate(Request $request, $kpiId)
+    {
+        $request->validate([
+            'fields_json' => 'required|string',
+        ]);
+
+        $fields = json_decode($request->input('fields_json'), true);
+        if (!is_array($fields)) {
+            return back()->with('error', 'Data field form tidak valid.');
+        }
+
+        $allowedTypes = ['text', 'number', 'date', 'select', 'textarea'];
+        foreach ($fields as $i => $f) {
+            $label = trim((string) ($f['label'] ?? ''));
+            $type  = $f['type'] ?? '';
+            if ($label === '') {
+                return back()->with('error', 'Label field ke-' . ($i + 1) . ' tidak boleh kosong.');
+            }
+            if (strcasecmp($label, 'KPI') === 0 || strcasecmp($label, 'Realisasi') === 0) {
+                return back()->with('error', 'Label "KPI" atau "Realisasi" tidak boleh digunakan untuk field tambahan.');
+            }
+            if (!in_array($type, $allowedTypes, true)) {
+                return back()->with('error', 'Tipe field "' . $label . '" tidak valid.');
+            }
+            if ($type === 'select' && empty($f['options'])) {
+                return back()->with('error', 'Field dropdown "' . $label . '" harus punya minimal 1 pilihan.');
+            }
+        }
+
+        try {
+            $kpiDetail = $this->api->get("/kpi-templates/{$kpiId}");
+            $formTemplate = $kpiDetail['data']['form_template'] ?? null;
+            $formTemplateId = $formTemplate['id'] ?? null;
+            $unitBisnisId = $kpiDetail['data']['unit_bisnis_id'] ?? null;
+            $kpiNama = $kpiDetail['data']['nama'] ?? 'Realisasi';
+
+            if (!$formTemplateId) {
+                if (!$unitBisnisId) {
+                    throw new \Exception('Unit bisnis tidak ditemukan.');
+                }
+                // Buat form template baru jika belum ada
+                $postFields = [];
+                $postFields[] = [
+                    'label'    => $kpiNama,
+                    'tipe'     => 'number',
+                    'wajib'    => true,
+                    'urutan'   => 0,
+                    'kpi_template_id' => $kpiId,
+                ];
+                foreach ($fields as $idx => $f) {
+                    $postFields[] = [
+                        'label'    => $f['label'],
+                        'tipe'     => $f['type'],
+                        'wajib'    => (bool) ($f['required'] ?? false),
+                        'urutan'   => $idx + 1,
+                    ];
+                }
+                $this->api->post('/form-templates', [
+                    'unit_bisnis_id' => $unitBisnisId,
+                    'nama'           => 'Form ' . $kpiNama,
+                    'deskripsi'      => 'Dibuat dari kelola form',
+                    'is_active'      => true,
+                    'fields'         => $postFields,
+                ]);
+            } else {
+                // Update existing
+                $finalFields = [];
+                $finalFields[] = [
+                    'label'    => $kpiNama,
+                    'type'     => 'number',
+                    'wajib'    => true,
+                    'urutan'   => 0,
+                    'kpi_template_id' => $kpiId,
+                ];
+                foreach ($fields as $idx => $f) {
+                    $finalFields[] = [
+                        'label'    => $f['label'],
+                        'type'     => $f['type'],
+                        'wajib'    => (bool) ($f['required'] ?? false),
+                        'urutan'   => $idx + 1,
+                    ];
+                }
+                $this->api->put("/form-templates/{$formTemplateId}", [
+                    'fields' => $finalFields,
+                ]);
+            }
+
+            return back()->with('success', 'Form berhasil disimpan.');
         } catch (\Exception $e) {
             return back()->with('error', $e->getMessage());
         }

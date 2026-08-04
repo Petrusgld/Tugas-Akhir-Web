@@ -21,9 +21,7 @@ class KpiValidasiController extends Controller
         $periods = [];
         $error   = null;
 
-        // Peta user (id => nama), dipakai KpiPeriodFlattener untuk menampilkan
-        // siapa yang menginput kalau record /kpi-periods hanya berisi ID user,
-        // bukan namanya langsung.
+        // Peta user (id => nama), dipakai KpiPeriodFlattener
         $usersById = [];
         try {
             $rawUsers = $this->api->get('/users')['data'] ?? [];
@@ -34,7 +32,7 @@ class KpiValidasiController extends Controller
                 }
             }
         } catch (\Exception $e) {
-            // biarkan kosong, nama user tetap fallback ke '-'
+            // biarkan kosong, nama user fallback ke '-'
         }
 
         try {
