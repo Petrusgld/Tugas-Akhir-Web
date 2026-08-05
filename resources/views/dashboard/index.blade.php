@@ -182,7 +182,7 @@
                     <td class="px-6 py-3">{{ $a['user_nama'] ?? '-' }}</td>
                     <td class="px-6 py-3">{{ $a['unit_bisnis_nama'] ?? '-' }}</td>
                     <td class="px-6 py-3">{{ $a['kpi_nama'] ?? '-' }}</td>
-                    <td class="px-6 py-3 text-gray-400">{{ $a['created_at'] ?? '-' }}</td>
+                    <td class="px-6 py-3 text-gray-400">{{ !empty($a['created_at']) ? \Carbon\Carbon::parse($a['created_at'])->format('H:i - d/m/Y') : '-' }}</td>
                 </tr>
             @empty
                 <tr>
