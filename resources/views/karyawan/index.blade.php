@@ -153,6 +153,8 @@
                 email: '{{ old('email', '') }}',
                 password: '',
                 passwordConfirm: '',
+                showPassword: false,
+                showPasswordConfirm: false,
                 get nameValid() { return this.name.trim().length > 0; },
                 get emailValid() { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.email); },
                 get passwordValid() {
@@ -187,15 +189,29 @@
                 <div class="grid grid-cols-2 gap-3">
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1.5">Password</label>
-                        <input type="password" name="password" x-model="password" required placeholder="Minimal 8 karakter"
-                               class="w-full px-4 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                               :class="password.length === 0 ? 'border-gray-300' : (passwordValid ? 'border-green-400' : 'border-red-400')">
+                        <div class="relative">
+                            <input :type="showPassword ? 'text' : 'password'" name="password" x-model="password" required placeholder="Minimal 8 karakter"
+                                   class="w-full pl-4 pr-10 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                                   :class="password.length === 0 ? 'border-gray-300' : (passwordValid ? 'border-green-400' : 'border-red-400')">
+                            <button type="button" @click="showPassword = !showPassword" tabindex="-1"
+                                    class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                                <svg x-show="!showPassword" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                                <svg x-show="showPassword" x-cloak xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a18.7 18.7 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                            </button>
+                        </div>
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1.5">Konfirmasi</label>
-                        <input type="password" name="password_confirmation" x-model="passwordConfirm" required placeholder="Ulangi password"
-                               class="w-full px-4 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                               :class="passwordConfirm.length === 0 ? 'border-gray-300' : (passwordMatch ? 'border-green-400' : 'border-red-400')">
+                        <div class="relative">
+                            <input :type="showPasswordConfirm ? 'text' : 'password'" name="password_confirmation" x-model="passwordConfirm" required placeholder="Ulangi password"
+                                   class="w-full pl-4 pr-10 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                                   :class="passwordConfirm.length === 0 ? 'border-gray-300' : (passwordMatch ? 'border-green-400' : 'border-red-400')">
+                            <button type="button" @click="showPasswordConfirm = !showPasswordConfirm" tabindex="-1"
+                                    class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                                <svg x-show="!showPasswordConfirm" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                                <svg x-show="showPasswordConfirm" x-cloak xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a18.7 18.7 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                            </button>
+                        </div>
                     </div>
                 </div>
                 <p class="text-xs -mt-2" :class="password.length === 0 ? 'text-gray-400' : (passwordValid ? 'text-green-600' : 'text-red-500')">
@@ -241,7 +257,7 @@
     <div x-show="editOpen" x-cloak class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
         <div @click.outside="editOpen = false" class="bg-white rounded-2xl p-6 w-full max-w-md">
             <h3 class="text-base font-semibold text-gray-900 mb-4">Edit Akun</h3>
-            <form :action="'/karyawan/' + editData.id" method="POST" class="space-y-4" x-data="{ newPassword: '' }">
+            <form :action="'/karyawan/' + editData.id" method="POST" class="space-y-4" x-data="{ newPassword: '', showPassword: false }">
                 @csrf
                 @method('PUT')
                 <input type="hidden" name="_form" value="edit">
@@ -255,9 +271,16 @@
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1.5">Password Baru (opsional)</label>
-                    <input type="password" name="password" x-model="newPassword" placeholder="Kosongkan jika tidak diubah"
-                           class="w-full px-4 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                           :class="newPassword.length === 0 ? 'border-gray-300' : (/^(?=.*[A-Z])(?=.*[a-z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).{8,}$/.test(newPassword) ? 'border-green-400' : 'border-red-400')">
+                    <div class="relative">
+                        <input :type="showPassword ? 'text' : 'password'" name="password" x-model="newPassword" placeholder="Kosongkan jika tidak diubah"
+                               class="w-full pl-4 pr-10 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                               :class="newPassword.length === 0 ? 'border-gray-300' : (/^(?=.*[A-Z])(?=.*[a-z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).{8,}$/.test(newPassword) ? 'border-green-400' : 'border-red-400')">
+                        <button type="button" @click="showPassword = !showPassword" tabindex="-1"
+                                class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                            <svg x-show="!showPassword" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                            <svg x-show="showPassword" x-cloak xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a18.7 18.7 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                        </button>
+                    </div>
                     <p class="text-xs mt-1" :class="newPassword.length === 0 ? 'text-gray-400' : (/^(?=.*[A-Z])(?=.*[a-z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).{8,}$/.test(newPassword) ? 'text-green-600' : 'text-red-500')">
                         Jika diisi, password harus minimal 8 karakter, kombinasi huruf besar, huruf kecil, angka, dan simbol khusus.
                     </p>

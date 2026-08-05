@@ -6,9 +6,11 @@
     use App\Helpers\Format; 
 
     $formattedPeriods = array_map(function($p) {
-        $p['created_at_formatted'] = !empty($p['created_at'])
-            ? \Carbon\Carbon::parse($p['created_at'])->setTimezone('Asia/Jakarta')->format('H:i - d/m/Y')
-            : '-';
+        $p['created_at_formatted'] = '-';
+        if (!empty($p['created_at'])) {
+            $dt = \Carbon\Carbon::parse($p['created_at'])->setTimezone('Asia/Jakarta');
+            $p['created_at_formatted'] = $dt->format('H:i') . ' - ' . $dt->format('d') . ' ' . Format::namaBulan($dt->month) . ' ' . $dt->format('Y');
+        }
         return $p;
     }, array_values($periods));
 @endphp
