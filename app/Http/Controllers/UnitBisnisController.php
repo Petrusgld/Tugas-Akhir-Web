@@ -104,8 +104,43 @@ class UnitBisnisController extends Controller
 
                 $formTemplate = $t['form_template'] ?? [];
                 $t['form_template_id'] = $formTemplate['id'] ?? null;
-                $allFields = $formTemplate['fields'] ?? [];
-                $t['form_fields'] = array_values(array_filter($allFields, function($f) {
+
+                // PENTING: nested 'form_template' dari
+                // /kpi-templates/unit-bisnis/{id} TIDAK menyertakan field
+                // detail, jadi harus fetch /form-templates/{id} terpisah.
+                // PERBAIKAN: key hasilnya adalah 'form_fields', BUKAN
+                // 'fields' — sebelumnya salah baca 'fields' sehingga selalu
+                // kosong walau data aslinya sudah ada di database.
+                $allFields = [];
+                if ($t['form_template_id']) {
+                    try {
+                        $formDetail = $this->api->get("/form-templates/{$t['form_template_id']}");
+                        $allFields = $formDetail['data']['form_fields'] ?? [];
+                    } catch (\Exception $e) {
+                        $allFields = [];
+                    }
+                }
+
+                // Normalisasi key: API pakai 'tipe'/'wajib', tapi Blade +
+                // Alpine.js (modal Kelola Form & Tambah KPI) baca
+                // 'type'/'required'. Tanpa ini, field yang sudah tersimpan
+                // tampil tapi dropdown tipe-nya kosong saat modal dibuka.
+                // Field KPI utama dibedakan dari field tambahan lewat
+                // kpi_template_id (terisi = field KPI, null = field tambahan) —
+                // BUKAN dari 'is_kpi_field', karena field itu ternyata selalu
+                // false di API untuk kedua jenis field (tidak bisa dipercaya).
+                $normalizedFields = array_map(function ($f) {
+                    return [
+                        'id'              => $f['id'] ?? null,
+                        'label'           => $f['label'] ?? '',
+                        'type'            => $f['tipe'] ?? ($f['type'] ?? 'text'),
+                        'required'        => (bool) ($f['wajib'] ?? ($f['required'] ?? false)),
+                        'options'         => $f['options'] ?? [],
+                        'kpi_template_id' => $f['kpi_template_id'] ?? null,
+                    ];
+                }, $allFields);
+
+                $t['form_fields'] = array_values(array_filter($normalizedFields, function ($f) {
                     return empty($f['kpi_template_id']);
                 }));
 
@@ -357,10 +392,14 @@ class UnitBisnisController extends Controller
                 ]);
             } else {
                 // Update existing
+                // PERBAIKAN: key sebelumnya 'type', tapi API expect 'tipe'
+                // (konsisten dengan blok "buat baru" di atas & method
+                // tambahKpi()) — ini penyebab error "The fields.0.tipe field
+                // is required when fields is present."
                 $finalFields = [];
                 $finalFields[] = [
                     'label'    => $kpiNama,
-                    'type'     => 'number',
+                    'tipe'     => 'number',
                     'wajib'    => true,
                     'urutan'   => 0,
                     'kpi_template_id' => $kpiId,
@@ -368,7 +407,7 @@ class UnitBisnisController extends Controller
                 foreach ($fields as $idx => $f) {
                     $finalFields[] = [
                         'label'    => $f['label'],
-                        'type'     => $f['type'],
+                        'tipe'     => $f['type'],
                         'wajib'    => (bool) ($f['required'] ?? false),
                         'urutan'   => $idx + 1,
                     ];

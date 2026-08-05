@@ -31,17 +31,21 @@ Route::middleware('auth.api')->group(function () {
 
     // Unit Bisnis & KPI
     Route::prefix('unit-bisnis')->name('unit-bisnis.')->group(function () {
-        Route::get('/',              [UnitBisnisController::class, 'index'])->name('index');
-        Route::post('/',             [UnitBisnisController::class, 'store'])->name('store');
-        Route::get('/{id}',          [UnitBisnisController::class, 'show'])->name('show');
-        Route::put('/{id}',          [UnitBisnisController::class, 'update'])->name('update');
-        Route::delete('/{id}',       [UnitBisnisController::class, 'destroy'])->name('destroy');
+    Route::get('/',              [UnitBisnisController::class, 'index'])->name('index');
+    Route::post('/',             [UnitBisnisController::class, 'store'])->name('store');
+    Route::get('/{id}',          [UnitBisnisController::class, 'show'])->name('show');
+    Route::put('/{id}',          [UnitBisnisController::class, 'update'])->name('update');
+    Route::delete('/{id}',       [UnitBisnisController::class, 'destroy'])->name('destroy');
 
-        // KPI dalam unit bisnis
-        Route::post('/{unitBisnisId}/kpi', [UnitBisnisController::class, 'tambahKpi'])->name('kpi.store');
-        Route::post('/kpi/{kpiId}/target', [UnitBisnisController::class, 'setTarget'])->name('kpi.target');
-        Route::delete('/kpi/{kpiId}',      [UnitBisnisController::class, 'hapusKpi'])->name('kpi.destroy');
-    });
+    // KPI dalam unit bisnis
+    Route::post('/{unitBisnisId}/kpi', [UnitBisnisController::class, 'tambahKpi'])->name('kpi.store');
+    Route::post('/kpi/{kpiId}/target', [UnitBisnisController::class, 'setTarget'])->name('kpi.target');
+    Route::delete('/kpi/{kpiId}',      [UnitBisnisController::class, 'hapusKpi'])->name('kpi.destroy');
+
+    // BARU: route untuk "Kelola Form" — sebelumnya tidak terdaftar sama
+    // sekali, sehingga submit modal Kelola Form selalu 404 / gagal.
+    Route::put('/kpi/{kpiId}/form-template', [UnitBisnisController::class, 'updateFormTemplate'])->name('kpi.form-template.update');
+});
 
     // Karyawan (User Management)
     Route::prefix('karyawan')->name('karyawan.')->group(function () {

@@ -96,12 +96,13 @@
             </div>
         </div>
 
-        {{-- Tampilan 6 Bulan --}}
+        {{-- Tampilan 6 Bulan: tren rata-rata pencapaian seluruh unit --}}
         <div x-show="trendView === '6bulan'">
             <canvas id="trendChart" height="160"></canvas>
         </div>
 
-        {{-- Tampilan 1 Bulan --}}
+        {{-- Tampilan 1 Bulan: breakdown pencapaian per unit bisnis untuk satu
+             bulan, dengan panah kiri/kanan untuk pindah bulan. --}}
         <div x-show="trendView === '1bulan'" x-cloak>
             <div class="flex items-center justify-between mb-3">
                 <a href="{{ request()->fullUrlWithQuery(['trend_bulan' => $trendSatuBulan['prev_bulan'], 'trend_tahun' => $trendSatuBulan['prev_tahun']]) }}"
@@ -181,9 +182,7 @@
                     <td class="px-6 py-3">{{ $a['user_nama'] ?? '-' }}</td>
                     <td class="px-6 py-3">{{ $a['unit_bisnis_nama'] ?? '-' }}</td>
                     <td class="px-6 py-3">{{ $a['kpi_nama'] ?? '-' }}</td>
-                    <td class="px-6 py-3 text-gray-400">
-                        {{ !empty($a['created_at']) ? \Carbon\Carbon::parse($a['created_at'])->setTimezone('Asia/Jakarta')->format('H:i - d/m/Y') : '-' }}
-                    </td>
+                    <td class="px-6 py-3 text-gray-400">{{ $a['created_at'] ?? '-' }}</td>
                 </tr>
             @empty
                 <tr>
@@ -236,8 +235,15 @@
         }
     });
 
+    // Tren "1 Bulan": breakdown pencapaian per unit bisnis untuk bulan yang
+    // sedang dipilih (dinavigasi lewat panah kiri/kanan di atas chart ini).
+    // Gaya chart dibuat sama persis dengan Tren KPI 6 Bulan (line/area hijau)
+    // supaya konsisten secara visual, hanya sumbu-X-nya per unit bisnis.
     const trendBulanIniUnits = @json($trendSatuBulan['units'] ?? []);
 
+    // Supaya label nama unit bisnis yang panjang tidak dirotasi miring (jelek
+    // & sulit dibaca), label dipecah jadi beberapa baris (maks. 2 kata/baris).
+    // Chart.js otomatis merender array string sebagai tick multi-baris.
     function wrapLabel(text) {
         const words = String(text ?? '-').split(' ');
         const lines = [];
