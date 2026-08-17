@@ -28,6 +28,8 @@ Route::middleware('auth.api')->group(function () {
 
     // Dashboard
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
+    Route::get('/skor-company', [DashboardController::class, 'skorCompany'])->name('skor-company');
+    Route::post('/bobot-kategori', [DashboardController::class, 'updateBobotKategori'])->name('bobot-kategori.update');
 
     // Unit Bisnis & KPI
     Route::prefix('unit-bisnis')->name('unit-bisnis.')->group(function () {

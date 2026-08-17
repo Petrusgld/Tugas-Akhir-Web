@@ -11,6 +11,23 @@
     $kuning    = collect($unitList)->where('status', 'kuning')->count();
     $merah     = collect($unitList)->where('status', 'merah')->count();
     $totalAchievement = $summary['total_achievement'] ?? ($summary['rata_rata'] ?? 0);
+
+    // PERBAIKAN: sebelumnya semua persentase achievement dibulatkan ke
+    // bilangan bulat (number_format(..., 0)), jadi KPI dengan pecahan
+    // (mis. 52.7%) selalu tampil dibulatkan jadi 53%. Sekarang dipakai
+    // helper ini: kalau angkanya memang punya pecahan, tampilkan 1 angka
+    // di belakang koma (52.7%); kalau bulat (52.0), tetap tampil tanpa
+    // koma (52%) supaya tidak ada ".0" yang mengganggu di tampilan.
+    $formatPersen = function ($value) {
+        $value = (float) $value;
+        // Bulatkan dulu ke 1 desimal supaya floating point error (mis.
+        // 51.999999) tidak bikin salah nampilin ".0" atau ".x" palsu.
+        $rounded = round($value, 1);
+        if ($rounded == floor($rounded)) {
+            return number_format($rounded, 0);
+        }
+        return number_format($rounded, 1);
+    };
 @endphp
 
 @if (!empty($apiErrors))
@@ -80,6 +97,17 @@
                 <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-red-500"></span> Merah: {{ $merah }}</div>
             </div>
         </div>
+
+        {{-- Tombol ke halaman Skor Company (skor berbobot + atur bobot
+             kategori). Owner only — untuk admin/manajer tombol ini tidak
+             ditampilkan sama sekali karena halaman tujuannya juga owner-only. --}}
+        @if ($isOwner)
+        <a href="{{ route('skor-company') }}"
+           class="flex items-center justify-between mt-5 pt-4 border-t border-gray-100 text-sm font-medium text-green-600 hover:text-green-700">
+            <span>Lihat Detail KPI Master</span>
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </a>
+        @endif
     </div>
 
     <div class="bg-white rounded-2xl border border-gray-200 p-6"
@@ -144,7 +172,7 @@
                              style="width: {{ min(100, (float) ($u['achievement'] ?? 0)) }}%"></div>
                     </div>
                     <div class="flex items-center justify-between mt-2">
-                        <span class="text-sm font-bold text-gray-900">{{ number_format((float) ($u['achievement'] ?? 0), 0) }}%</span>
+                        <span class="text-sm font-bold text-gray-900">{{ $formatPersen($u['achievement'] ?? 0) }}%</span>
                         <span class="text-xs px-2 py-0.5 rounded-full font-medium {{ Format::statusColor($u['status'] ?? null, 'bgLight') }} {{ Format::statusColor($u['status'] ?? null, 'text') }}">
                             {{ strtoupper($u['status'] ?? '-') }}
                         </span>
@@ -170,7 +198,6 @@
     <table class="w-full text-sm">
         <thead class="bg-gray-50 text-gray-500 text-xs uppercase">
             <tr>
-                <th class="text-left px-6 py-3">Nama User</th>
                 <th class="text-left px-6 py-3">Unit Bisnis</th>
                 <th class="text-left px-6 py-3">Form / KPI</th>
                 <th class="text-left px-6 py-3">Waktu</th>
@@ -179,7 +206,6 @@
         <tbody class="divide-y divide-gray-100">
             @forelse ($aktivitas as $a)
                 <tr>
-                    <td class="px-6 py-3">{{ $a['user_nama'] ?? '-' }}</td>
                     <td class="px-6 py-3">{{ $a['unit_bisnis_nama'] ?? '-' }}</td>
                     <td class="px-6 py-3">{{ $a['kpi_nama'] ?? '-' }}</td>
                     <td class="px-6 py-3 text-gray-400">
@@ -193,7 +219,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="4" class="px-6 py-8 text-center text-gray-400">Belum ada aktivitas terbaru.</td>
+                    <td colspan="3" class="px-6 py-8 text-center text-gray-400">Belum ada aktivitas terbaru.</td>
                 </tr>
             @endforelse
         </tbody>

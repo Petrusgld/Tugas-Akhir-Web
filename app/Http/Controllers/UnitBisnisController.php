@@ -79,8 +79,16 @@ class UnitBisnisController extends Controller
         try {
             $unit = $this->api->get("/unit-bisnis/{$id}")['data'] ?? null;
             if ($unit) {
-                $unit['nama']         = Format::pick($unit, ['nama', 'unit_bisnis_nama']);
+                $unit['nama']          = Format::pick($unit, ['nama', 'unit_bisnis_nama']);
                 $unit['kategori_nama'] = Format::pick($unit, ['kategori_nama', 'kategori.nama']);
+                // PENTING: kategori_id unit ini dipakai di bawah untuk
+                // memfilter dropdown "Jenis KPI" (lihat blok kpiJenis),
+                // supaya cuma KPI yang relevan dengan kategori unit ini
+                // yang muncul (mis. unit kategori Properti hanya melihat
+                // KPI Revenue, Jumlah Komplain, Biaya Maintenance, Progres
+                // Pembangunan — bukan KPI milik kategori UMKM/Properti
+                // Management).
+                $unit['kategori_id']   = Format::pick($unit, ['kategori_id', 'kategori.id']);
             }
         } catch (\Exception $e) {
             $error = $e->getMessage();
@@ -150,8 +158,20 @@ class UnitBisnisController extends Controller
             $error = $e->getMessage();
         }
 
+        // PERBAIKAN: Jenis KPI sekarang difilter per KATEGORI unit bisnis
+        // yang sedang dibuka, memakai parameter query baru dari API
+        // (GET /kpi-jenis?kategori_id={id}). Sebelumnya endpoint ini
+        // selalu dipanggil TANPA filter, sehingga dropdown "Tambah KPI"
+        // menampilkan SEMUA jenis KPI dari semua kategori (Properti,
+        // Properti Management, UMKM tercampur jadi satu) — bikin user bisa
+        // salah pilih KPI yang sebenarnya tidak relevan untuk unit ini.
+        // Kalau kategori_id unit tidak diketahui (mis. gagal fetch unit di
+        // atas), fallback ke tanpa filter supaya dropdown tidak kosong sama
+        // sekali.
         try {
-            $kpiJenis = $this->api->get('/kpi-jenis')['data'] ?? [];
+            $kategoriId = $unit['kategori_id'] ?? null;
+            $query = $kategoriId !== null ? ['kategori_id' => $kategoriId] : [];
+            $kpiJenis = $this->api->get('/kpi-jenis', $query)['data'] ?? [];
         } catch (\Exception $e) {
             // biarkan kosong
         }

@@ -63,7 +63,6 @@
             <thead class="bg-gray-50 text-gray-500 text-xs uppercase">
                 <tr>
                     <th class="text-left px-6 py-3 w-14">No</th>
-                    <th class="text-left px-6 py-3">User</th>
                     <th class="text-left px-6 py-3">Unit Bisnis</th>
                     <th class="text-left px-6 py-3">KPI</th>
                     <th class="text-left px-6 py-3">Periode</th>
@@ -76,12 +75,11 @@
             </thead>
             <tbody class="divide-y divide-gray-100">
                 <template x-if="filtered.length === 0">
-                    <tr><td colspan="10" class="px-6 py-8 text-center text-gray-400">Tidak ada input KPI yang cocok.</td></tr>
+                    <tr><td colspan="9" class="px-6 py-8 text-center text-gray-400">Tidak ada input KPI yang cocok.</td></tr>
                 </template>
                 <template x-for="(p, i) in paged" :key="p.id">
                     <tr>
                         <td class="px-6 py-3 text-gray-400" x-text="(page - 1) * perPage + i + 1"></td>
-                        <td class="px-6 py-3 text-gray-700" x-text="p.user_nama ?? '-'"></td>
                         <td class="px-6 py-3 font-medium text-gray-900" x-text="p.unit_bisnis_nama ?? '-'"></td>
                         <td class="px-6 py-3 text-gray-500" x-text="p.kpi_nama ?? '-'"></td>
                         <td class="px-6 py-3 text-gray-500" x-text="(p.periode_bulan ?? '-') + '/' + (p.periode_tahun ?? '-')"></td>
@@ -99,19 +97,8 @@
                                   x-text="p.status ?? '-'"></span>
                         </td>
                         <td class="px-6 py-3">
-                            <div class="flex items-center gap-3">
-                                <button @click="editOpen = true; editData = { ...p, newRealisasi: p.realisasi }"
-                                        class="text-brand-600 hover:text-brand-700 font-medium">Validasi / Koreksi</button>
-                                <button @click="p._debugOpen = !p._debugOpen" class="text-gray-400 hover:text-gray-600 text-xs underline">data mentah</button>
-                            </div>
-                        </td>
-                    </tr>
-                </template>
-                <template x-for="(p, i) in paged" :key="'debug-' + p.id">
-                    <tr x-show="p._debugOpen" x-cloak>
-                        <td colspan="10" class="px-6 py-3 bg-gray-50">
-                            <p class="text-xs text-gray-400 mb-1">Data mentah dari API (sementara, untuk membantu memetakan nama field yang benar):</p>
-                            <pre class="text-xs text-gray-600 whitespace-pre-wrap break-all" x-text="JSON.stringify(p._raw ?? {}, null, 2)"></pre>
+                            <button @click="editOpen = true; editData = { ...p, newRealisasi: p.realisasi }"
+                                    class="text-brand-600 hover:text-brand-700 font-medium">Validasi</button>
                         </td>
                     </tr>
                 </template>

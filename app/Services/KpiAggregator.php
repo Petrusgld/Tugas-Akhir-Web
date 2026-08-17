@@ -4,48 +4,12 @@ namespace App\Services;
 
 use App\Helpers\Format;
 
-/**
- * KpiAggregator
- * ==============
- * Dashboard, Leaderboard, dan kartu "Total Unit Bisnis / On Track / Warning /
- * Critical" sebelumnya mengambil data dari endpoint agregat backend
- * (/kpi-master/summary, /statistik/aktivitas, /leaderboard, /kpi-master/trend).
- * Endpoint-endpoint itu ternyata mengembalikan data kosong atau salah
- * (0 unit bisnis, 0% padahal ada realisasi, dst) walaupun endpoint dasarnya
- * — /unit-bisnis, /kpi-templates/unit-bisnis/{id} — sudah terbukti benar
- * (dipakai & tampil normal di halaman "Unit Bisnis & KPI").
- *
- * PERBAIKAN #1: versi sebelumnya mengambil target/realisasi tiap unit lewat
- * endpoint /kpi-periods/unit-bisnis/{id}. Endpoint itu TERNYATA yang
- * bermasalah — selalu kosong — sehingga achievement tiap unit selalu 0% dan
- * status selalu "merah" di Dashboard & Leaderboard, walaupun halaman
- * "Validasi Input KPI" (yang memakai endpoint GLOBAL /kpi-periods) menampilkan
- * data yang benar untuk unit yang sama. Sekarang kelas ini HANYA memakai
- * endpoint global /kpi-periods (satu kali fetch, di-cache, lalu dikelompokkan
- * per unit_bisnis_id di PHP) — sumber yang sama persis dengan yang sudah
- * terbukti benar di Validasi Input KPI.
- *
- * PERBAIKAN #2: jumlah_kpi per unit sebelumnya diambil dari endpoint per-unit
- * /kpi-templates/unit-bisnis/{id}, yang ternyata punya pola bug yang sama —
- * kosong untuk hampir semua unit kecuali kebetulan satu-dua unit saja.
- * Sekarang dipindah ke fetch GLOBAL /kpi-templates (satu kali, di-cache),
- * dikelompokkan per unit_bisnis_id di PHP — pola yang sama dengan
- * allPeriods().
- *
- * PERBAIKAN #3: status unit (hijau/kuning/merah) sebelumnya dihitung ulang
- * dengan membandingkan achievement rata-rata ke rata-rata threshold_hijau/
- * threshold_kuning dari semua KPI unit itu. Ini salah secara logika karena
- * mencampur threshold dari KPI yang berbeda-beda jadi satu angka yang tidak
- * bermakna, dan mengabaikan tipe formula KPI (maximize/minimize/range/binary)
- * yang membuat perhitungan realisasi/target*100 tidak selalu valid.
- * Sekarang status unit memakai field `status` yang SUDAH dihitung backend
- * per-KPI (field ini sudah benar & sudah memperhitungkan tipe formula +
- * threshold KPI itu sendiri), lalu diambil status TERBURUK (weakest link)
- * di antara semua KPI unit tersebut sebagai status unit. Ini konsisten
- * dengan apa yang sudah tampil benar di halaman Validasi Input KPI.
- */
 class KpiAggregator
 {
+    /** Threshold status unit — HARUS sama persis dengan Admin App (Flutter). */
+    protected const THRESHOLD_HIJAU = 80;
+    protected const THRESHOLD_KUNING = 50;
+
     /** Cache in-memory supaya /kpi-periods tidak di-fetch berulang kali dalam satu request. */
     protected ?array $allPeriodsCache = null;
 
@@ -95,6 +59,23 @@ class KpiAggregator
         }
 
         return $this->allTemplatesCache;
+    }
+
+    /**
+     * Tentukan status hijau/kuning/merah dari rata-rata achievement unit,
+     * memakai threshold yang identik dengan Admin App. Dipusatkan di satu
+     * method supaya Dashboard, Leaderboard, dan halaman lain yang memakai
+     * aggregator ini otomatis konsisten.
+     */
+    protected function statusFromAchievement(float $achievement): string
+    {
+        if ($achievement >= self::THRESHOLD_HIJAU) {
+            return 'hijau';
+        }
+        if ($achievement >= self::THRESHOLD_KUNING) {
+            return 'kuning';
+        }
+        return 'merah';
     }
 
     /**
@@ -185,7 +166,6 @@ class KpiAggregator
             if (!empty($periodeIni)) {
                 $row['punya_target'] = true;
                 $achievements = [];
-                $statuses = [];
 
                 foreach ($periodeIni as $p) {
                     $target    = (float) Format::pick($p, ['target', 'nilai_target'], 0);
@@ -194,45 +174,16 @@ class KpiAggregator
                     if ($target > 0) {
                         $achievements[] = min(100, ($realisasi / $target) * 100);
                     }
-
-                    // PENTING: pakai status yang SUDAH dihitung backend per-KPI
-                    // (field ini sudah benar dan sudah memperhitungkan tipe
-                    // formula KPI — maximize/minimize/range/binary — serta
-                    // threshold KPI itu sendiri). Jangan dihitung ulang dengan
-                    // mengambil rata-rata threshold semua KPI di unit, karena
-                    // itu mencampur threshold KPI yang berbeda-beda jadi satu
-                    // angka yang tidak bermakna dan menghasilkan status yang
-                    // salah (contoh lama: unit dengan KPI hijau & kuning tetap
-                    // dihitung merah karena rata-rata threshold-nya terlalu
-                    // tinggi).
-                    $st = Format::pick($p, ['status', 'warna']);
-                    if ($st !== null) {
-                        $statuses[] = strtolower((string) $st);
-                    }
                 }
 
                 $row['achievement'] = !empty($achievements) ? array_sum($achievements) / count($achievements) : 0.0;
 
-                // Status unit = status TERBURUK di antara semua KPI unit itu
-                // (weakest link: kalau ada satu saja KPI merah, unit dianggap
-                // merah; kalau tidak ada merah tapi ada kuning, unit kuning;
-                // hijau hanya kalau semua KPI hijau). Ini konsisten dengan apa
-                // yang sudah tampil benar di halaman Validasi Input KPI untuk
-                // KPI-KPI yang sama.
-                if (in_array('merah', $statuses, true)) {
-                    $row['status'] = 'merah';
-                } elseif (in_array('kuning', $statuses, true)) {
-                    $row['status'] = 'kuning';
-                } elseif (in_array('hijau', $statuses, true)) {
-                    $row['status'] = 'hijau';
-                } else {
-                    // Fallback kalau field status ternyata tidak ada sama
-                    // sekali di response API (seharusnya tidak terjadi,
-                    // berdasarkan sampel data yang sudah dicek).
-                    $row['status'] = $row['achievement'] >= 85
-                        ? 'hijau'
-                        : ($row['achievement'] >= 50 ? 'kuning' : 'merah');
-                }
+                // Status unit = THRESHOLD dari rata-rata achievement unit itu
+                // sendiri (bukan lagi weakest-link dari status per-KPI).
+                // Ini konsisten dengan Admin App, yang juga menentukan status
+                // unit dari rata-rata persentase unit, bukan dari status
+                // per-KPI individual. Lihat catatan PERBAIKAN #3 di atas.
+                $row['status'] = $this->statusFromAchievement($row['achievement']);
             }
 
             $results[] = $row;
