@@ -81,13 +81,6 @@ class UnitBisnisController extends Controller
             if ($unit) {
                 $unit['nama']          = Format::pick($unit, ['nama', 'unit_bisnis_nama']);
                 $unit['kategori_nama'] = Format::pick($unit, ['kategori_nama', 'kategori.nama']);
-                // PENTING: kategori_id unit ini dipakai di bawah untuk
-                // memfilter dropdown "Jenis KPI" (lihat blok kpiJenis),
-                // supaya cuma KPI yang relevan dengan kategori unit ini
-                // yang muncul (mis. unit kategori Properti hanya melihat
-                // KPI Revenue, Jumlah Komplain, Biaya Maintenance, Progres
-                // Pembangunan — bukan KPI milik kategori UMKM/Properti
-                // Management).
                 $unit['kategori_id']   = Format::pick($unit, ['kategori_id', 'kategori.id']);
             }
         } catch (\Exception $e) {
@@ -113,12 +106,6 @@ class UnitBisnisController extends Controller
                 $formTemplate = $t['form_template'] ?? [];
                 $t['form_template_id'] = $formTemplate['id'] ?? null;
 
-                // PENTING: nested 'form_template' dari
-                // /kpi-templates/unit-bisnis/{id} TIDAK menyertakan field
-                // detail, jadi harus fetch /form-templates/{id} terpisah.
-                // PERBAIKAN: key hasilnya adalah 'form_fields', BUKAN
-                // 'fields' — sebelumnya salah baca 'fields' sehingga selalu
-                // kosong walau data aslinya sudah ada di database.
                 $allFields = [];
                 if ($t['form_template_id']) {
                     try {
@@ -129,21 +116,12 @@ class UnitBisnisController extends Controller
                     }
                 }
 
-                // Normalisasi key: API pakai 'tipe'/'wajib', tapi Blade +
-                // Alpine.js (modal Kelola Form & Tambah KPI) baca
-                // 'type'/'required'. Tanpa ini, field yang sudah tersimpan
-                // tampil tapi dropdown tipe-nya kosong saat modal dibuka.
-                // Field KPI utama dibedakan dari field tambahan lewat
-                // kpi_template_id (terisi = field KPI, null = field tambahan) —
-                // BUKAN dari 'is_kpi_field', karena field itu ternyata selalu
-                // false di API untuk kedua jenis field (tidak bisa dipercaya).
                 $normalizedFields = array_map(function ($f) {
                     return [
                         'id'              => $f['id'] ?? null,
                         'label'           => $f['label'] ?? '',
                         'type'            => $f['tipe'] ?? ($f['type'] ?? 'text'),
                         'required'        => (bool) ($f['wajib'] ?? ($f['required'] ?? false)),
-                        'options'         => $f['options'] ?? [],
                         'kpi_template_id' => $f['kpi_template_id'] ?? null,
                     ];
                 }, $allFields);
@@ -158,16 +136,6 @@ class UnitBisnisController extends Controller
             $error = $e->getMessage();
         }
 
-        // PERBAIKAN: Jenis KPI sekarang difilter per KATEGORI unit bisnis
-        // yang sedang dibuka, memakai parameter query baru dari API
-        // (GET /kpi-jenis?kategori_id={id}). Sebelumnya endpoint ini
-        // selalu dipanggil TANPA filter, sehingga dropdown "Tambah KPI"
-        // menampilkan SEMUA jenis KPI dari semua kategori (Properti,
-        // Properti Management, UMKM tercampur jadi satu) — bikin user bisa
-        // salah pilih KPI yang sebenarnya tidak relevan untuk unit ini.
-        // Kalau kategori_id unit tidak diketahui (mis. gagal fetch unit di
-        // atas), fallback ke tanpa filter supaya dropdown tidak kosong sama
-        // sekali.
         try {
             $kategoriId = $unit['kategori_id'] ?? null;
             $query = $kategoriId !== null ? ['kategori_id' => $kategoriId] : [];
@@ -345,6 +313,11 @@ class UnitBisnisController extends Controller
 
     /**
      * Update form template (kelola form)
+     *
+     * PERBAIKAN: tipe field "select" (Dropdown / pilihan) DIHAPUS dari daftar
+     * tipe yang diizinkan — fitur dropdown di form builder karyawan dihapus
+     * dari UI, jadi divalidasi juga di backend supaya tidak bisa disisipkan
+     * lewat request manual (mis. Postman) yang melewati form di Blade.
      */
     public function updateFormTemplate(Request $request, $kpiId)
     {
@@ -357,7 +330,7 @@ class UnitBisnisController extends Controller
             return back()->with('error', 'Data field form tidak valid.');
         }
 
-        $allowedTypes = ['text', 'number', 'date', 'select', 'textarea'];
+        $allowedTypes = ['text', 'number', 'date', 'textarea'];
         foreach ($fields as $i => $f) {
             $label = trim((string) ($f['label'] ?? ''));
             $type  = $f['type'] ?? '';
@@ -369,9 +342,6 @@ class UnitBisnisController extends Controller
             }
             if (!in_array($type, $allowedTypes, true)) {
                 return back()->with('error', 'Tipe field "' . $label . '" tidak valid.');
-            }
-            if ($type === 'select' && empty($f['options'])) {
-                return back()->with('error', 'Field dropdown "' . $label . '" harus punya minimal 1 pilihan.');
             }
         }
 
@@ -412,10 +382,6 @@ class UnitBisnisController extends Controller
                 ]);
             } else {
                 // Update existing
-                // PERBAIKAN: key sebelumnya 'type', tapi API expect 'tipe'
-                // (konsisten dengan blok "buat baru" di atas & method
-                // tambahKpi()) — ini penyebab error "The fields.0.tipe field
-                // is required when fields is present."
                 $finalFields = [];
                 $finalFields[] = [
                     'label'    => $kpiNama,

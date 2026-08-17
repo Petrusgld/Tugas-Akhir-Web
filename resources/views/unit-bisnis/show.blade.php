@@ -22,7 +22,7 @@
         // Form builder untuk tambah KPI
         formFields: [],
         addField() {
-            this.formFields.push({ label: '', type: 'text', required: false, options: [] });
+            this.formFields.push({ label: '', type: 'text', required: false });
         },
         removeField(i) {
             this.formFields.splice(i, 1);
@@ -33,12 +33,6 @@
             const tmp = this.formFields[i];
             this.formFields[i] = this.formFields[j];
             this.formFields[j] = tmp;
-        },
-        optionsText(f) {
-            return Array.isArray(f.options) ? f.options.join(', ') : '';
-        },
-        setOptionsFromText(f, text) {
-            f.options = text.split(',').map(s => s.trim()).filter(s => s !== '');
         },
         validateLabel(label) {
             return label.trim() !== '' && label.toLowerCase() !== 'kpi' && label.toLowerCase() !== 'realisasi';
@@ -197,20 +191,12 @@
                                         <option value="text">Teks singkat</option>
                                         <option value="number">Angka</option>
                                         <option value="date">Tanggal</option>
-                                        <option value="select">Dropdown</option>
                                         <option value="textarea">Teks panjang</option>
                                     </select>
                                     <label class="flex items-center gap-1.5 text-sm text-gray-600">
                                         <input type="checkbox" x-model="f.required" class="rounded border-gray-300 text-brand-500 focus:ring-brand-500">
                                         Wajib
                                     </label>
-                                </div>
-                                <div x-show="f.type === 'select'" x-cloak>
-                                    <input type="text" x-model="f.optionsText" 
-                                           placeholder="Pilihan, pisahkan koma (contoh: Cash, Transfer, QRIS)"
-                                           class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                                           @input="setOptionsFromText(f, $event.target.value)">
-                                    <p class="text-xs text-gray-400 mt-1">Pisahkan dengan koma (,)</p>
                                 </div>
                             </div>
                         </template>
@@ -226,8 +212,7 @@
                 <input type="hidden" name="form_fields" :value="JSON.stringify(formFields.map(f => ({
                     label: f.label,
                     type: f.type,
-                    required: f.required,
-                    options: f.type === 'select' ? (f.options || []) : null
+                    required: f.required
                 })))">
 
                 <p class="text-xs text-gray-400 pt-3">Field "Realisasi" (KPI) akan otomatis ditambahkan sebagai field utama.</p>
@@ -241,7 +226,7 @@
     </div>
 
     {{-- ============================================= --}}
-    {{-- MODAL SET TARGET (tidak berubah)              --}}
+    {{-- MODAL SET TARGET                              --}}
     {{-- ============================================= --}}
     <div x-show="targetOpen" x-cloak class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
         <div @click.outside="targetOpen = false" class="bg-white rounded-2xl p-6 w-full max-w-md">
@@ -259,6 +244,19 @@
                            class="w-full px-4 py-2.5 border border-gray-200 bg-gray-50 rounded-lg text-sm text-gray-500">
                 </div>
 
+                {{-- PERBAIKAN: sebelumnya x-data bersarang ini (dengan
+                     variabel "display") hanya dihitung SEKALI saat halaman
+                     pertama kali dimuat — bukan setiap kali modal dibuka.
+                     Akibatnya walau targetData.target sudah terisi target
+                     lama saat tombol "Set Target" diklik (yang bisa dilihat
+                     dari Threshold Hijau/Kuning yang sudah benar, karena
+                     baca targetData langsung tanpa perantara "display"),
+                     input Target tetap tampil kosong (masih menampilkan
+                     placeholder "Contoh: 1.000.000"). Sekarang ditambahkan
+                     x-init dengan $watch('targetData', ...) supaya "display"
+                     otomatis disegarkan setiap kali targetData berubah,
+                     yaitu setiap kali tombol "Set Target" diklik untuk KPI
+                     mana pun (baik yang sudah punya target maupun belum). --}}
                 <div x-data="{
                         display: targetData.target ? Number(targetData.target).toLocaleString('id-ID') : '',
                         sync(e) {
@@ -266,7 +264,10 @@
                             targetData.target = raw;
                             this.display = raw ? Number(raw).toLocaleString('id-ID') : '';
                         }
-                     }">
+                     }"
+                     x-init="$watch('targetData', () => {
+                        display = targetData.target ? Number(targetData.target).toLocaleString('id-ID') : '';
+                     })">
                     <label class="block text-sm font-medium text-gray-700 mb-1.5">
                         Target <span x-show="targetData.satuan && targetData.satuan.toLowerCase().includes('rupiah')" x-cloak class="text-gray-400 font-normal">(Rp)</span>
                     </label>
@@ -315,11 +316,10 @@
                     { value: 'text',     label: 'Teks singkat' },
                     { value: 'number',   label: 'Angka' },
                     { value: 'date',     label: 'Tanggal' },
-                    { value: 'select',   label: 'Dropdown / pilihan' },
                     { value: 'textarea', label: 'Teks panjang' },
                 ],
                 addField() {
-                    formData.fields.push({ label: '', type: 'text', required: false, options: [] });
+                    formData.fields.push({ label: '', type: 'text', required: false });
                 },
                 removeField(i) {
                     formData.fields.splice(i, 1);
@@ -330,12 +330,6 @@
                     const tmp = formData.fields[i];
                     formData.fields[i] = formData.fields[j];
                     formData.fields[j] = tmp;
-                },
-                optionsText(f) {
-                    return Array.isArray(f.options) ? f.options.join(', ') : '';
-                },
-                setOptionsFromText(f, text) {
-                    f.options = text.split(',').map(s => s.trim()).filter(s => s !== '');
                 },
                 validateLabel(label) {
                     return label.trim() !== '' && label.toLowerCase() !== 'kpi' && label.toLowerCase() !== 'realisasi';
@@ -392,13 +386,6 @@
                                     <input type="checkbox" x-model="f.required" class="rounded border-gray-300 text-brand-500 focus:ring-brand-500">
                                     Wajib
                                 </label>
-                            </div>
-                            <div x-show="f.type === 'select'" x-cloak>
-                                <input type="text" x-model="f.optionsText" 
-                                       placeholder="Pilihan, pisahkan koma (contoh: Cash, Transfer, QRIS)"
-                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                                       @input="setOptionsFromText(f, $event.target.value)">
-                                <p class="text-xs text-gray-400 mt-1">Pisahkan dengan koma (,)</p>
                             </div>
                         </div>
                     </template>
